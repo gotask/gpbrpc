@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package gpbrpc;
+
+message ProtocolRequest{
+	uint32 CmdId = 1;
+	uint32 CmdSeq = 2;
+	string CmdData = 3;
+}
+
+message ProtocolResponse{
+	uint32 CmdId = 1;
+	uint32 CmdSeq = 2;
+	uint32 PushSeq = 3;
+	uint32 ErrorCode = 4;
+	string CmdData = 5;
+}
+
+message RPCRequestPacket{
+	bool	IsOneWay = 1;
+	uint32	RequestId  = 2;
+	string ServiceName = 3;
+	string FuncName   = 4;
+	string ReqPayload = 5;
+	uint32 Timeout = 6;
+	map<string, string> Context = 7;
+}
+
+message RPCResponsePacket{
+	int32	RPCRetCode  = 1;
+	uint32  RequestId	= 2;
+	string  RspPayload	= 3;
+	map<string, string> Context = 4;
+}
