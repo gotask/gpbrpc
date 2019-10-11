@@ -248,7 +248,7 @@ func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	handle := rpc.realHandle[current.GoroutineID]
 	handle.SetCurrent(cur)
 	m, r, e := handle.HandleReq(req)
-	if !req.IsOneWay || handle.IsResponse() {
+	if !req.IsOneWay && handle.IsResponse() {
 		rpc.SendResponse(current, req, r, string(m))
 	}
 	if e != nil {

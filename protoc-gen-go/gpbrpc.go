@@ -20,7 +20,7 @@ type grpc struct {
 
 // Name returns the name of this plugin, "grpc".
 func (g *grpc) Name() string {
-	return "grpc"
+	return "gpbrpc"
 }
 
 // The names for packages imported in the generated code.
