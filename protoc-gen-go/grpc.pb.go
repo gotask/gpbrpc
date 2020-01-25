@@ -229,7 +229,7 @@ func (c *TestClient) HashProcessor(rsp *gpbrpc.RPCResponsePacket) int {
 // async call functions
 func (_c *TestClient) UnaryCall(in *SimpleRequest, cb Test_UnaryCall_Callback, exp Test_UnaryCall_Exception) {
 	buf, _ := proto.Marshal(in)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "UnaryCall", ReqPayload: string(buf), Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "UnaryCall", ReqPayload: buf, Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
 	if cb == nil && exp == nil {
 		req.Req.IsOneWay = true
 	}
@@ -238,7 +238,7 @@ func (_c *TestClient) UnaryCall(in *SimpleRequest, cb Test_UnaryCall_Callback, e
 
 func (_c *TestClient) Downstream(in *SimpleRequest, cb Test_Downstream_Callback, exp Test_Downstream_Exception) {
 	buf, _ := proto.Marshal(in)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Downstream", ReqPayload: string(buf), Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Downstream", ReqPayload: buf, Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
 	if cb == nil && exp == nil {
 		req.Req.IsOneWay = true
 	}
@@ -247,7 +247,7 @@ func (_c *TestClient) Downstream(in *SimpleRequest, cb Test_Downstream_Callback,
 
 func (_c *TestClient) Upstream(in *StreamMsg, cb Test_Upstream_Callback, exp Test_Upstream_Exception) {
 	buf, _ := proto.Marshal(in)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Upstream", ReqPayload: string(buf), Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Upstream", ReqPayload: buf, Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
 	if cb == nil && exp == nil {
 		req.Req.IsOneWay = true
 	}
@@ -256,7 +256,7 @@ func (_c *TestClient) Upstream(in *StreamMsg, cb Test_Upstream_Callback, exp Tes
 
 func (_c *TestClient) Bidi(in *StreamMsg, cb Test_Bidi_Callback, exp Test_Bidi_Exception) {
 	buf, _ := proto.Marshal(in)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Bidi", ReqPayload: string(buf), Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Bidi", ReqPayload: buf, Context: _c.GetContent()}, Callback: cb, Exception: exp, Handle: _c}
 	if cb == nil && exp == nil {
 		req.Req.IsOneWay = true
 	}
@@ -265,16 +265,17 @@ func (_c *TestClient) Bidi(in *StreamMsg, cb Test_Bidi_Callback, exp Test_Bidi_E
 
 // sync call functions
 func (_c *TestClient) UnaryCall_Sync(in *SimpleRequest) (out *SimpleResponse, ret int32) {
+	out = &SimpleResponse{}
 	buf, _ := proto.Marshal(in)
 	sg := make(chan *gpbrpc.RPCResponsePacket, 1)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "UnaryCall", ReqPayload: string(buf), Context: _c.GetContent()}, Signal: sg, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "UnaryCall", ReqPayload: buf, Context: _c.GetContent()}, Signal: sg, Handle: _c}
 	_c.rpcclient.PushRequest(req)
 	to := time.NewTimer(time.Duration(_c.GetTimeout()) * time.Millisecond)
 	select {
 	case s := <-sg:
 		ret = s.RPCRetCode
-		if s.RspPayload != "" {
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+		if len(s.RspPayload) > 0 {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				ret = gpbrpc.GPBUnmarshalFailed
 			}
 		}
@@ -287,16 +288,17 @@ func (_c *TestClient) UnaryCall_Sync(in *SimpleRequest) (out *SimpleResponse, re
 }
 
 func (_c *TestClient) Downstream_Sync(in *SimpleRequest) (out *StreamMsg, ret int32) {
+	out = &StreamMsg{}
 	buf, _ := proto.Marshal(in)
 	sg := make(chan *gpbrpc.RPCResponsePacket, 1)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Downstream", ReqPayload: string(buf), Context: _c.GetContent()}, Signal: sg, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Downstream", ReqPayload: buf, Context: _c.GetContent()}, Signal: sg, Handle: _c}
 	_c.rpcclient.PushRequest(req)
 	to := time.NewTimer(time.Duration(_c.GetTimeout()) * time.Millisecond)
 	select {
 	case s := <-sg:
 		ret = s.RPCRetCode
-		if s.RspPayload != "" {
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+		if len(s.RspPayload) > 0 {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				ret = gpbrpc.GPBUnmarshalFailed
 			}
 		}
@@ -309,16 +311,17 @@ func (_c *TestClient) Downstream_Sync(in *SimpleRequest) (out *StreamMsg, ret in
 }
 
 func (_c *TestClient) Upstream_Sync(in *StreamMsg) (out *SimpleResponse, ret int32) {
+	out = &SimpleResponse{}
 	buf, _ := proto.Marshal(in)
 	sg := make(chan *gpbrpc.RPCResponsePacket, 1)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Upstream", ReqPayload: string(buf), Context: _c.GetContent()}, Signal: sg, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Upstream", ReqPayload: buf, Context: _c.GetContent()}, Signal: sg, Handle: _c}
 	_c.rpcclient.PushRequest(req)
 	to := time.NewTimer(time.Duration(_c.GetTimeout()) * time.Millisecond)
 	select {
 	case s := <-sg:
 		ret = s.RPCRetCode
-		if s.RspPayload != "" {
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+		if len(s.RspPayload) > 0 {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				ret = gpbrpc.GPBUnmarshalFailed
 			}
 		}
@@ -331,16 +334,17 @@ func (_c *TestClient) Upstream_Sync(in *StreamMsg) (out *SimpleResponse, ret int
 }
 
 func (_c *TestClient) Bidi_Sync(in *StreamMsg) (out *StreamMsg2, ret int32) {
+	out = &StreamMsg2{}
 	buf, _ := proto.Marshal(in)
 	sg := make(chan *gpbrpc.RPCResponsePacket, 1)
-	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Bidi", ReqPayload: string(buf), Context: _c.GetContent()}, Signal: sg, Handle: _c}
+	req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "Test", FuncName: "Bidi", ReqPayload: buf, Context: _c.GetContent()}, Signal: sg, Handle: _c}
 	_c.rpcclient.PushRequest(req)
 	to := time.NewTimer(time.Duration(_c.GetTimeout()) * time.Millisecond)
 	select {
 	case s := <-sg:
 		ret = s.RPCRetCode
-		if s.RspPayload != "" {
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+		if len(s.RspPayload) > 0 {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				ret = gpbrpc.GPBUnmarshalFailed
 			}
 		}
@@ -360,7 +364,7 @@ func (_c *TestClient) HandleRSP(r *gpbrpc.RPCRequest, s *gpbrpc.RPCResponsePacke
 			}
 		} else {
 			out := &SimpleResponse{}
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				if r.Exception.(Test_UnaryCall_Exception) != nil {
 					r.Exception.(Test_UnaryCall_Exception)(gpbrpc.GPBUnmarshalFailed)
 				}
@@ -377,7 +381,7 @@ func (_c *TestClient) HandleRSP(r *gpbrpc.RPCRequest, s *gpbrpc.RPCResponsePacke
 			}
 		} else {
 			out := &StreamMsg{}
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				if r.Exception.(Test_Downstream_Exception) != nil {
 					r.Exception.(Test_Downstream_Exception)(gpbrpc.GPBUnmarshalFailed)
 				}
@@ -394,7 +398,7 @@ func (_c *TestClient) HandleRSP(r *gpbrpc.RPCRequest, s *gpbrpc.RPCResponsePacke
 			}
 		} else {
 			out := &SimpleResponse{}
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				if r.Exception.(Test_Upstream_Exception) != nil {
 					r.Exception.(Test_Upstream_Exception)(gpbrpc.GPBUnmarshalFailed)
 				}
@@ -411,7 +415,7 @@ func (_c *TestClient) HandleRSP(r *gpbrpc.RPCRequest, s *gpbrpc.RPCResponsePacke
 			}
 		} else {
 			out := &StreamMsg2{}
-			if err := proto.Unmarshal([]byte(s.RspPayload), out); err != nil {
+			if err := proto.Unmarshal(s.RspPayload, out); err != nil {
 				if r.Exception.(Test_Bidi_Exception) != nil {
 					r.Exception.(Test_Bidi_Exception)(gpbrpc.GPBUnmarshalFailed)
 				}
@@ -436,31 +440,27 @@ type TestServer interface {
 	//Get msg processor by hash
 	HashProcessor(req *gpbrpc.RPCRequestPacket) int
 	//each thread has one handle
-	NewHandle() TestServer
-	//record current content for sending rpcresponse async
-	SetCurrent(gpbrpc.Current)
-	//rpc request is need response immediately
-	SetResponse(bool)
-	//default return should be true
-	IsResponse() bool
+	NewHandle(*gpbrpc.RPCHelper) TestServer
 }
 
 type Test struct {
+	*gpbrpc.RPCHelper
 	TestServer
 }
 
 func NewTestServer(s TestServer) *Test {
-	return &Test{s}
+	return &Test{&gpbrpc.RPCHelper{}, s}
 }
 
 func (s *Test) NewHandle() gpbrpc.ServerInterface {
-	return &Test{s.TestServer.NewHandle()}
+	h := &gpbrpc.RPCHelper{}
+	return &Test{h, s.TestServer.NewHandle(h)}
 }
 
 func (s *Test) HandleReq(req *gpbrpc.RPCRequestPacket) (msg []byte, ret int32, err error) {
 	if req.FuncName == "UnaryCall" {
 		in := &SimpleRequest{}
-		if err = proto.Unmarshal([]byte(req.ReqPayload), in); err != nil {
+		if err = proto.Unmarshal(req.ReqPayload, in); err != nil {
 			ret = gpbrpc.GPBUnmarshalFailed
 			err = gpbrpc.ErrGPBUnmarshalFailed
 		} else {
@@ -468,7 +468,7 @@ func (s *Test) HandleReq(req *gpbrpc.RPCRequestPacket) (msg []byte, ret int32, e
 		}
 	} else if req.FuncName == "Downstream" {
 		in := &SimpleRequest{}
-		if err = proto.Unmarshal([]byte(req.ReqPayload), in); err != nil {
+		if err = proto.Unmarshal(req.ReqPayload, in); err != nil {
 			ret = gpbrpc.GPBUnmarshalFailed
 			err = gpbrpc.ErrGPBUnmarshalFailed
 		} else {
@@ -476,7 +476,7 @@ func (s *Test) HandleReq(req *gpbrpc.RPCRequestPacket) (msg []byte, ret int32, e
 		}
 	} else if req.FuncName == "Upstream" {
 		in := &StreamMsg{}
-		if err = proto.Unmarshal([]byte(req.ReqPayload), in); err != nil {
+		if err = proto.Unmarshal(req.ReqPayload, in); err != nil {
 			ret = gpbrpc.GPBUnmarshalFailed
 			err = gpbrpc.ErrGPBUnmarshalFailed
 		} else {
@@ -484,7 +484,7 @@ func (s *Test) HandleReq(req *gpbrpc.RPCRequestPacket) (msg []byte, ret int32, e
 		}
 	} else if req.FuncName == "Bidi" {
 		in := &StreamMsg{}
-		if err = proto.Unmarshal([]byte(req.ReqPayload), in); err != nil {
+		if err = proto.Unmarshal(req.ReqPayload, in); err != nil {
 			ret = gpbrpc.GPBUnmarshalFailed
 			err = gpbrpc.ErrGPBUnmarshalFailed
 		} else {

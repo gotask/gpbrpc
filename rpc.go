@@ -64,6 +64,17 @@ func (rpc *RPCClient) Send(req *RPCRequest) error {
 
 func (rpc *RPCClient) PushRequest(req *RPCRequest) {
 	req.Req.RequestId = atomic.AddUint32(&rpc.sequence, 1)
+	req.Req.Timeout = req.Handle.GetTimeout() + uint32(time.Now().UnixNano()/1e6)
+
+	if req.Signal == nil {
+		if !req.Req.IsOneWay {
+			rpc.reqMutex.Lock()
+			rpc.requests = append(rpc.requests, req)
+			rpc.reqMutex.Unlock()
+		}
+	} else {
+		rpc.syncRequests.Store(req.Req.RequestId, req)
+	}
 	req.Req.Timeout = req.Handle.GetTimeout()
 	e := rpc.Send(req)
 	if e != nil {
@@ -76,19 +87,6 @@ func (rpc *RPCClient) PushRequest(req *RPCRequest) {
 			req.Signal <- rsp
 			rpc.HandleError(nil, ErrReqSendQueueIsFull)
 		}
-		return
-	}
-	req.Req.Timeout += uint32(time.Now().UnixNano() / 1e6)
-
-	if req.Signal == nil {
-		if req.Req.IsOneWay {
-			return
-		}
-		rpc.reqMutex.Lock()
-		rpc.requests = append(rpc.requests, req)
-		rpc.reqMutex.Unlock()
-	} else {
-		rpc.syncRequests.Store(req.Req.RequestId, req)
 	}
 }
 
@@ -109,6 +107,7 @@ func (rpc *RPCClient) Loop() {
 	rpc.failedReqs = make([]*RPCRequest, 0, 16)
 	rpc.failedMutex.Unlock()
 	for _, v := range failedTmpQ {
+		rpc.removeRequest(v.Req.RequestId)
 		rsp := &RPCResponsePacket{RPCRetCode: RequestQueueIsFull, RequestId: v.Req.RequestId, Context: v.Req.Context}
 		v.Handle.HandleRSP(v, rsp)
 		rpc.HandleError(nil, ErrReqSendQueueIsFull)
@@ -152,19 +151,25 @@ func (rpc *RPCClient) getRPCRequest(id uint32) (*RPCRequest, int, bool) {
 	return v, i, ok
 }
 
-func (rpc *RPCClient) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
-	rsp := msg.(*RPCResponsePacket)
-
+func (rpc *RPCClient) removeRequest(rid uint32) *RPCRequest {
 	rpc.reqMutex.Lock()
-	v, i, ok := rpc.getRPCRequest(rsp.RequestId)
+	v, i, ok := rpc.getRPCRequest(rid)
 	if !ok {
 		rpc.reqMutex.Unlock()
-		rpc.HandleError(current, ErrRecvdRspTimeOut)
-		return
+		return nil
 	}
 	rpc.requests = append(rpc.requests[:i], rpc.requests[i+1:]...)
 	rpc.reqMutex.Unlock()
-	v.Handle.HandleRSP(v, rsp)
+	return v
+}
+func (rpc *RPCClient) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
+	rsp := msg.(*RPCResponsePacket)
+	v := rpc.removeRequest(rsp.RequestId)
+	if v != nil {
+		v.Handle.HandleRSP(v, rsp)
+	} else {
+		rpc.HandleError(current, ErrRecvdRspTimeOut)
+	}
 }
 
 func (rpc *RPCClient) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int32, msg interface{}, err error) {
@@ -239,7 +244,7 @@ func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	req := msg.(*RPCRequestPacket)
 	now := time.Now().UnixNano() / 1e6
 	if req.Timeout < uint32(now) {
-		rpc.SendResponse(current, req, ReqRecvdButTimeout, "")
+		rpc.SendResponse(current, req, ReqRecvdButTimeout, nil)
 		rpc.HandleError(current, ErrRecvdReqTimeOut)
 		return
 	}
@@ -249,7 +254,7 @@ func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	handle.SetCurrent(cur)
 	m, r, e := handle.HandleReq(req)
 	if !req.IsOneWay && handle.IsResponse() {
-		rpc.SendResponse(current, req, r, string(m))
+		rpc.SendResponse(current, req, r, m)
 	}
 	if e != nil {
 		rpc.HandleError(current, e)
@@ -257,7 +262,7 @@ func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	handle.SetResponse(true)
 }
 
-func (rpc *RPCServer) SendResponse(current *CurrentContent, req *RPCRequestPacket, ret int32, msg string) error {
+func (rpc *RPCServer) SendResponse(current *CurrentContent, req *RPCRequestPacket, ret int32, msg []byte) error {
 	rsp := &RPCResponsePacket{RPCRetCode: ret, RequestId: req.RequestId, RspPayload: msg, Context: req.Context}
 	buf, _ := proto.Marshal(rsp)
 	e := current.Sess.AsyncSend(PackSendProtocol(buf))
@@ -300,32 +305,27 @@ func (rpc *RPCServer) HandleError(current *CurrentContent, err error) {
 	SysLog.Error(err.Error())
 }
 
-type DefaultRPCService struct {
+type RPCHelper struct {
 	current     Current
 	notresponse bool
 }
 
-//Get msg processor by hash
-func (rpc *DefaultRPCService) HashProcessor(req *RPCRequestPacket) int {
-	return -1
-}
-
 //record current content for sending rpcresponse async
-func (rpc *DefaultRPCService) SetCurrent(cur Current) {
+func (rpc *RPCHelper) SetCurrent(cur Current) {
 	rpc.current = cur
 }
 
 //get current content for sending rpcresponse async
-func (rpc *DefaultRPCService) GetCurrent() Current {
+func (rpc *RPCHelper) GetCurrent() Current {
 	return rpc.current
 }
 
 //rpc request is need response immediately
-func (rpc *DefaultRPCService) SetResponse(b bool) {
+func (rpc *RPCHelper) SetResponse(b bool) {
 	rpc.notresponse = !b
 }
 
 //default return should be true
-func (rpc *DefaultRPCService) IsResponse() bool {
+func (rpc *RPCHelper) IsResponse() bool {
 	return !rpc.notresponse
 }
