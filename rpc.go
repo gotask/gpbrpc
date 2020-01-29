@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	proto "github.com/gogo/protobuf/proto"
+	proto "github.com/golang/protobuf/proto"
 	. "github.com/gotask/gost/stnet"
 )
 

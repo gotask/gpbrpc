@@ -3,12 +3,12 @@ package gpbrpc
 import (
 	"fmt"
 
-	proto "github.com/gogo/protobuf/proto"
+	proto "github.com/golang/protobuf/proto"
 	. "github.com/gotask/gost/stnet"
 )
 
 type GpbServer struct {
-	*Server
+	server  *Server
 	clients map[string]*RPCClient
 }
 
@@ -16,20 +16,20 @@ func NewGpbServer(name string, loopmsec uint32) *GpbServer {
 	return &GpbServer{NewServer(name, loopmsec), make(map[string]*RPCClient)}
 }
 func (svr *GpbServer) Start() error {
-	return svr.Server.Start()
+	return svr.server.Start()
 }
 func (svr *GpbServer) Stop() {
-	svr.Server.Stop()
+	svr.server.Stop()
 }
 func (svr *GpbServer) AddRpcService(name, address string, heartbeat uint32, rpcsevice ServerInterface, threadId int) error {
 	rpcImp := &RPCServer{rpcsevice, nil}
-	_, err := svr.AddService(name, address, heartbeat, rpcImp, threadId)
+	_, err := svr.server.AddService(name, address, heartbeat, rpcImp, threadId)
 	return err
 }
 
 func (svr *GpbServer) AddRpcClient(name string, threadId int) error {
 	rpcimp := &RPCClient{}
-	service, err := svr.AddService(name, "", 0, rpcimp, threadId)
+	service, err := svr.server.AddService(name, "", 0, rpcimp, threadId)
 	if err != nil {
 		return err
 	}
@@ -52,12 +52,12 @@ func (svr *GpbServer) NewRpcConnector(clientName, address string, handle ClientI
 
 func (svr *GpbServer) AddGpbService(name, address string, heartbeat uint32, gpbsevice GpbServiceImp, threadId int) (*Service, error) {
 	gpbImp := &ServiceGpb{gpbsevice}
-	return svr.AddService(name, address, heartbeat, gpbImp, threadId)
+	return svr.server.AddService(name, address, heartbeat, gpbImp, threadId)
 }
 
 func (svr *GpbServer) AddGpbClient(name string, gpbclient GpbClientImp, threadId int) (*Service, error) {
 	gpbImp := &ConnectGpb{gpbclient}
-	return svr.AddService(name, "", 0, gpbImp, threadId)
+	return svr.server.AddService(name, "", 0, gpbImp, threadId)
 }
 
 func SendRPCResponse(current *Current, msg interface{}) error {
