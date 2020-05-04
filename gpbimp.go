@@ -1,8 +1,12 @@
 package gpbrpc
 
 import (
-	proto "github.com/golang/protobuf/proto"
+	"fmt"
+	"reflect"
+
 	. "github.com/gotask/gost/stnet"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 var (
@@ -25,9 +29,49 @@ func (service *ServiceGpb) Destroy() {
 	service.imp.Destroy()
 
 }
-func (service *ServiceGpb) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
-	req := msg.(*ProtocolRequest)
-	service.imp.HandleMessage(current, req)
+func (service *ServiceGpb) HandleMessage(current *CurrentContent, msgID uint32, m interface{}) {
+	msg := m.(*ProtocolRequest)
+	if s, ok := _MsgTypeId[msg.CmdId]; ok {
+		t := proto.MessageType(s).Elem()
+		req := reflect.New(t).Interface()
+		e := proto.Unmarshal(msg.CmdData, req.(proto.Message))
+		if e != nil {
+			service.imp.HandleError(current, e)
+			return
+		}
+		err, rsp := service.imp.HandleRequest(current, msg.CmdId, msg.CmdSeq, req.(proto.Message))
+		r := ProtocolResponse{}
+		if err != 0 {
+			r.ErrorCode = err
+		} else if rsp != nil {
+			r.CmdSeq = msg.CmdSeq
+			id, ok := _MsgTypeName[proto.MessageName(rsp)]
+			if !ok {
+				service.imp.HandleError(current, fmt.Errorf("cannot find rsp msg type by name: %s", proto.MessageName(rsp)))
+				return
+			}
+			r.CmdId = id
+			r.CmdData, e = proto.Marshal(rsp)
+			if e != nil {
+				service.imp.HandleError(current, e)
+				return
+			}
+		} else {
+			return
+		}
+		buf, e := proto.Marshal(&r)
+		if e != nil {
+			service.imp.HandleError(current, e)
+			return
+		}
+		e = current.Sess.Send(PackSendProtocol(buf))
+		if e != nil {
+			service.imp.HandleError(current, e)
+			return
+		}
+	} else {
+		service.imp.HandleError(current, fmt.Errorf("cannot find req msg type by id: %d", msg.CmdId))
+	}
 }
 func (service *ServiceGpb) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int32, msg interface{}, err error) {
 	if len(data) < 4 {
@@ -78,9 +122,25 @@ func (cs *ConnectGpb) Loop() {
 func (cs *ConnectGpb) Destroy() {
 
 }
-func (cs *ConnectGpb) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
-	rsp := msg.(*ProtocolResponse)
-	cs.imp.HandleMessage(current, rsp)
+func (cs *ConnectGpb) HandleMessage(current *CurrentContent, msgID uint32, m interface{}) {
+	msg := m.(*ProtocolResponse)
+
+	if msg.ErrorCode != 0 {
+		cs.imp.HandleError(current, msg.ErrorCode, nil)
+		return
+	}
+	if s, ok := _MsgTypeId[msg.CmdId]; ok {
+		t := proto.MessageType(s).Elem()
+		rsp := reflect.New(t).Interface()
+		e := proto.Unmarshal(msg.CmdData, rsp.(proto.Message))
+		if e != nil {
+			cs.imp.HandleError(current, 0, e)
+			return
+		}
+		cs.imp.HandleResponse(current, msg.CmdId, msg.CmdSeq, msg.PushSeq, rsp.(proto.Message))
+	} else {
+		cs.imp.HandleError(current, 0, fmt.Errorf("cannot find rsp msg type by id: %d", msg.CmdId))
+	}
 }
 func (cs *ConnectGpb) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int32, msg interface{}, err error) {
 	if len(data) < 4 {
@@ -103,14 +163,13 @@ func (cs *ConnectGpb) Unmarshal(sess *Session, data []byte) (lenParsed int, msgI
 	return int(msgLen), 0, rsp, nil
 }
 func (cs *ConnectGpb) HashProcessor(sess *Session, msgID int32, msg interface{}) (processorID int) {
-	rsp := msg.(*ProtocolResponse)
-	return cs.imp.HashProcessor(sess, rsp)
+	return -1
 }
 func (cs *ConnectGpb) SessionOpen(sess *Session) {
-	cs.imp.OnConnected()
+	cs.imp.OnConnected(sess.Connector())
 }
 func (cs *ConnectGpb) SessionClose(sess *Session) {
-	cs.imp.OnDisconnected()
+	cs.imp.OnDisconnected(sess.Connector())
 }
 func (cs *ConnectGpb) HeartBeatTimeOut(sess *Session) {
 

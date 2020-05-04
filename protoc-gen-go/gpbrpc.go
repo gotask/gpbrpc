@@ -57,11 +57,6 @@ func (g *grpc) Generate(file *generator.FileDescriptor) {
 		return
 	}
 
-	g.P("// Reference imports to suppress errors if they are not otherwise used.")
-	g.P("var _ gpbrpc.RPCClient")
-	g.P("var _ stnet.Connect")
-	g.P()
-
 	for i, service := range file.FileDescriptorProto.Service {
 		g.generateService(file, service, i)
 	}
@@ -75,7 +70,6 @@ func (g *grpc) GenerateImports(file *generator.FileDescriptor) {
 	g.P("import (")
 	g.P(`"time"`)
 	g.P(`"github.com/gotask/gpbrpc"`)
-	g.P(`"github.com/gotask/gost/stnet"`)
 	g.P(")")
 	g.P()
 }
@@ -121,11 +115,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 
 	// Client structure.
 	g.P("type ", servName, "Client struct {")
-	g.P("conn *stnet.Connect")
-	g.P("rpcclient *gpbrpc.RPCClient")
-	g.P("content map[string]string")
-	g.P("timeout uint32")
-	g.P("hashfunc func(*gpbrpc.RPCResponsePacket) int")
+	g.P("*gpbrpc.RPCBaseClient")
 	g.P("}")
 	g.P()
 
@@ -135,56 +125,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	}
 	g.P(fmt.Sprintf(`// new client for %s service.`, servName))
 	g.P("func New", servName, "Client () *", servName, "Client {")
-	g.P("return &", servName, "Client{nil, nil, make(map[string]string), 5000, nil}")
-	g.P("}")
-	g.P()
-
-	g.P("// Change the content of this client which is send to service.")
-	g.P("func (c *", servName, "Client) SetContent(k, v string) {")
-	g.P("c.content[k] = v")
-	g.P("}")
-	g.P()
-	g.P("func (c *", servName, "Client) DelContent(k string) {")
-	g.P("delete(c.content, k)")
-	g.P("}")
-	g.P()
-	g.P("func (c *", servName, "Client) GetContent() map[string]string {")
-	g.P("return c.content")
-	g.P("}")
-	g.P()
-	g.P("// set timeout of the response from service.")
-	g.P("func (c *", servName, "Client) SetTimeout(t uint32) {")
-	g.P("c.timeout = t")
-	g.P("}")
-	g.P()
-	g.P("func (c *", servName, "Client) GetTimeout() uint32 {")
-	g.P("return c.timeout")
-	g.P("}")
-	g.P()
-	g.P("// set rpcclient.")
-	g.P("func (c *", servName, "Client) SetRPCClient(rpc *gpbrpc.RPCClient) {")
-	g.P("c.rpcclient = rpc")
-	g.P("}")
-	g.P()
-	g.P("// set connection which is connecting the service.")
-	g.P("func (c *", servName, "Client) SetConn(conn *stnet.Connect) {")
-	g.P("c.conn = conn")
-	g.P("}")
-	g.P()
-	g.P("func (c *", servName, "Client) GetConn() *stnet.Connect {")
-	g.P("return c.conn")
-	g.P("}")
-	g.P()
-	g.P("// decide which thread is used to handle the response.")
-	g.P("func (c *", servName, "Client) SetHashFunc(f func(*gpbrpc.RPCResponsePacket) int) {")
-	g.P("c.hashfunc = f")
-	g.P("}")
-	g.P()
-	g.P("func (c *", servName, "Client) HashProcessor(rsp *gpbrpc.RPCResponsePacket) int {")
-	g.P("if c.hashfunc!=nil{")
-	g.P("return c.hashfunc(rsp)")
-	g.P("}")
-	g.P("return -1")
+	g.P("return &", servName, "Client{gpbrpc.NewRPCBaseClient()}")
 	g.P("}")
 	g.P()
 
@@ -198,7 +139,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 		g.P("if cb == nil && exp == nil {")
 		g.P("req.Req.IsOneWay = true")
 		g.P("}")
-		g.P("_c.rpcclient.PushRequest(req)")
+		g.P("_c.GetRPCClient().PushRequest(req)")
 		g.P("}")
 		g.P()
 	}
@@ -213,7 +154,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 		g.P("buf, _ := proto.Marshal(in)")
 		g.P("sg := make(chan *gpbrpc.RPCResponsePacket, 1)")
 		g.P(`req := &gpbrpc.RPCRequest{Req: gpbrpc.RPCRequestPacket{ServiceName: "`, servName, `", FuncName: "`, method.GetName(), `", ReqPayload: buf, Context: _c.GetContent()}, Signal: sg, Handle: _c}`)
-		g.P("_c.rpcclient.PushRequest(req)")
+		g.P("_c.GetRPCClient().PushRequest(req)")
 		g.P("to := time.NewTimer(time.Duration(_c.GetTimeout()) * time.Millisecond)")
 		g.P("select {")
 		g.P("case s := <-sg:")
@@ -227,7 +168,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 		g.P("ret = gpbrpc.SyncCallTimeout")
 		g.P("}")
 		g.P("to.Stop()")
-		g.P("_c.rpcclient.DeleteRequest(req.Req.RequestId)")
+		g.P("_c.GetRPCClient().DeleteRequest(req.Req.RequestId)")
 		g.P("return out, ret")
 		g.P("}")
 		g.P()
@@ -265,8 +206,8 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	g.P("}")
 	g.P()
 
-	// Server interface.
-	serverType := servName + "Server"
+	// Service interface.
+	serverType := servName + "Service"
 	g.P("// ", serverType, " is the server API for ", servName, " service.")
 	if deprecated {
 		g.P("//")
@@ -279,8 +220,6 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	}
 	g.P("//Get msg processor by hash")
 	g.P("HashProcessor(req *gpbrpc.RPCRequestPacket) int")
-	g.P("//each thread has one handle")
-	g.P("NewHandle(*gpbrpc.RPCHelper) " + serverType)
 	g.P("}")
 	g.P()
 
@@ -289,18 +228,17 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 	g.P(serverType)
 	g.P("}")
 	g.P()
-	// Server registration.
+	// Service registration.
 	if deprecated {
 		g.P(deprecationComment)
 	}
-	g.P("func New", servName, "Server(s ", serverType, ") *", servName, "{")
+	g.P("func New", servName, "Service(s ", serverType, ") gpbrpc.ServerInterface {")
 	g.P("return &", servName, "{&gpbrpc.RPCHelper{}, s}")
 	g.P("}")
 	g.P()
 
 	g.P("func (s *", servName, ") NewHandle() gpbrpc.ServerInterface {")
-	g.P("h := &gpbrpc.RPCHelper{}")
-	g.P("return &", servName, "{h, s.", servName, "Server.NewHandle(h)}")
+	g.P("return &", servName, "{&gpbrpc.RPCHelper{}, gpbrpc.NewStruct(s.", serverType, ").(", serverType, ")}")
 	g.P("}")
 	g.P()
 
@@ -319,7 +257,7 @@ func (g *grpc) generateService(file *generator.FileDescriptor, service *pb.Servi
 			g.P(`ret = gpbrpc.GPBUnmarshalFailed`)
 			g.P(`err = gpbrpc.ErrGPBUnmarshalFailed`)
 			g.P(`} else {`)
-			g.P("msg,err = proto.Marshal(s.", method.GetName(), "(in))")
+			g.P("msg,err = proto.Marshal(s.", method.GetName(), "(s.RPCHelper, in))")
 			g.P("}")
 		}
 		g.P("}else{")
@@ -349,5 +287,5 @@ func (g *grpc) generateServerSignature(servName string, method *pb.MethodDescrip
 		reqArgs = append(reqArgs, "*"+g.typeName(method.GetInputType()))
 	}
 
-	return methName + "(" + strings.Join(reqArgs, ", ") + ") " + ret
+	return methName + "(*gpbrpc.RPCHelper, " + strings.Join(reqArgs, ", ") + ") " + ret
 }

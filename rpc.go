@@ -2,12 +2,14 @@ package gpbrpc
 
 import (
 	"errors"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	proto "github.com/golang/protobuf/proto"
 	. "github.com/gotask/gost/stnet"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 var (
@@ -43,10 +45,10 @@ type ClientInterface interface {
 	SetRPCClient(*RPCClient)
 	SetConn(*Connect)
 	GetConn() *Connect
-	HashProcessor(*RPCResponsePacket) int
 }
 
 type RPCClient struct {
+	clientImp   RpcClientImp
 	master      *Service
 	requests    []*RPCRequest
 	reqMutex    sync.Mutex
@@ -102,6 +104,9 @@ func (rpc *RPCClient) Init() bool {
 }
 
 func (rpc *RPCClient) Loop() {
+	if rpc.clientImp != nil {
+		rpc.clientImp.Loop()
+	}
 	rpc.failedMutex.Lock()
 	failedTmpQ := rpc.failedReqs
 	rpc.failedReqs = make([]*RPCRequest, 0, 16)
@@ -198,12 +203,17 @@ func (rpc *RPCClient) Unmarshal(sess *Session, data []byte) (lenParsed int, msgI
 }
 
 func (rpc *RPCClient) HashProcessor(sess *Session, msgID int32, msg interface{}) (processorID int) {
-	rsp := msg.(*RPCResponsePacket)
-	return sess.UserData.(ClientInterface).HashProcessor(rsp)
+	return -1
 }
 func (rpc *RPCClient) SessionOpen(sess *Session) {
+	if rpc.clientImp != nil {
+		rpc.clientImp.OnConnected(sess.Connector())
+	}
 }
 func (rpc *RPCClient) SessionClose(sess *Session) {
+	if rpc.clientImp != nil {
+		rpc.clientImp.OnDisconnected(sess.Connector())
+	}
 }
 func (rpc *RPCClient) HeartBeatTimeOut(sess *Session) {
 }
@@ -217,16 +227,28 @@ type Current struct {
 }
 
 type ServerInterface interface {
+	NewHandle() ServerInterface
 	HandleReq(req *RPCRequestPacket) (msg []byte, ret int32, err error)
 	HashProcessor(req *RPCRequestPacket) int
-	NewHandle() ServerInterface
 	SetCurrent(Current)
+	GetCurrent() Current
 	SetResponse(bool)
 	IsResponse() bool
 }
 type RPCServer struct {
 	handle     ServerInterface
 	realHandle []ServerInterface
+}
+
+func NewStruct(i interface{}) interface{} {
+	ni := reflect.TypeOf(i)
+	if ni.Kind() == reflect.Ptr {
+		ni = ni.Elem()
+	}
+	if ni.Kind() != reflect.Struct {
+		panic("server imp is not struct")
+	}
+	return reflect.New(ni).Interface()
 }
 
 func (rpc *RPCServer) Init() bool {
@@ -238,7 +260,6 @@ func (rpc *RPCServer) Init() bool {
 func (rpc *RPCServer) Loop() {
 }
 func (rpc *RPCServer) Destroy() {
-
 }
 func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
 	req := msg.(*RPCRequestPacket)
@@ -328,4 +349,56 @@ func (rpc *RPCHelper) SetResponse(b bool) {
 //default return should be true
 func (rpc *RPCHelper) IsResponse() bool {
 	return !rpc.notresponse
+}
+
+type RPCBaseClient struct {
+	conn      *Connect
+	rpcclient *RPCClient
+	content   map[string]string
+	timeout   uint32
+}
+
+func NewRPCBaseClient() *RPCBaseClient {
+	return &RPCBaseClient{nil, nil, make(map[string]string), 5000}
+}
+
+// Change the content of this client which is send to service.
+func (c *RPCBaseClient) SetContent(k, v string) {
+	c.content[k] = v
+}
+
+func (c *RPCBaseClient) DelContent(k string) {
+	delete(c.content, k)
+}
+
+func (c *RPCBaseClient) GetContent() map[string]string {
+	return c.content
+}
+
+// set timeout of the response from service.
+func (c *RPCBaseClient) SetTimeout(t uint32) {
+	c.timeout = t
+}
+
+func (c *RPCBaseClient) GetTimeout() uint32 {
+	return c.timeout
+}
+
+// set rpcclient.
+func (c *RPCBaseClient) SetRPCClient(rpc *RPCClient) {
+	c.rpcclient = rpc
+}
+
+// get rpcclient.
+func (c *RPCBaseClient) GetRPCClient() *RPCClient {
+	return c.rpcclient
+}
+
+// set connection which is connecting the service.
+func (c *RPCBaseClient) SetConn(conn *Connect) {
+	c.conn = conn
+}
+
+func (c *RPCBaseClient) GetConn() *Connect {
+	return c.conn
 }
