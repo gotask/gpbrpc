@@ -43,7 +43,7 @@ func (svr *GpbServer) NewRpcConnector(clientid, address string, handle ClientInt
 	if !ok {
 		panic("no rpcclient: " + clientid)
 	}
-	c := client.master.NewConnect(address)
+	c := client.master.NewConnect(address, nil)
 	handle.SetRPCClient(client)
 	handle.SetConn(c)
 	return c
@@ -79,10 +79,10 @@ func (svr *GpbServer) AddGpbClient(clientid string, gpbclient GpbClientImp, thre
 	return nil
 }
 
-func (svr *GpbServer) NewGpbConnector(clientid, address string) *Connect {
+func (svr *GpbServer) NewGpbConnector(clientid, address string, userdata interface{}) *Connect {
 	client, ok := svr.gpbServices[clientid]
 	if !ok {
 		panic("no clientservice: " + clientid)
 	}
-	return client.NewConnect(address)
+	return client.NewConnect(address, userdata)
 }
