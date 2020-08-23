@@ -2,18 +2,10 @@ syntax = "proto3";
 
 package gpbrpc;
 
-message ProtocolRequest{
-	uint32 CmdId = 1;
-	uint32 CmdSeq = 2;
+message ProtocolMessage{
+	uint64 CmdId = 1;
+	uint64 CmdSeq = 2;
 	bytes CmdData = 3;
-}
-
-message ProtocolResponse{
-	uint32 CmdId = 1;
-	uint32 CmdSeq = 2;
-	uint32 PushSeq = 3;
-	uint32 ErrorCode = 4;
-	bytes CmdData = 5;
 }
 
 message RPCRequestPacket{

@@ -167,7 +167,7 @@ func (rpc *RPCClient) removeRequest(rid uint32) *RPCRequest {
 	rpc.reqMutex.Unlock()
 	return v
 }
-func (rpc *RPCClient) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
+func (rpc *RPCClient) HandleMessage(current *CurrentContent, msgID uint64, msg interface{}) {
 	rsp := msg.(*RPCResponsePacket)
 	v := rpc.removeRequest(rsp.RequestId)
 	if v != nil {
@@ -177,7 +177,7 @@ func (rpc *RPCClient) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	}
 }
 
-func (rpc *RPCClient) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int32, msg interface{}, err error) {
+func (rpc *RPCClient) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int64, msg interface{}, err error) {
 	if len(data) < 4 {
 		return 0, 0, nil, nil
 	}
@@ -202,7 +202,7 @@ func (rpc *RPCClient) Unmarshal(sess *Session, data []byte) (lenParsed int, msgI
 	return int(msgLen), 0, rsp, nil
 }
 
-func (rpc *RPCClient) HashProcessor(sess *Session, msgID int32, msg interface{}) (processorID int) {
+func (rpc *RPCClient) HashProcessor(sess *Session, msgID uint64, msg interface{}) (processorID int) {
 	return -1
 }
 func (rpc *RPCClient) SessionOpen(sess *Session) {
@@ -261,7 +261,7 @@ func (rpc *RPCServer) Loop() {
 }
 func (rpc *RPCServer) Destroy() {
 }
-func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg interface{}) {
+func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint64, msg interface{}) {
 	req := msg.(*RPCRequestPacket)
 	now := time.Now().UnixNano() / 1e6
 	if req.Timeout < uint32(now) {
@@ -277,7 +277,7 @@ func (rpc *RPCServer) HandleMessage(current *CurrentContent, msgID uint32, msg i
 	if !req.IsOneWay && handle.IsResponse() {
 		rpc.SendResponse(current, req, r, m)
 	}
-	if e != nil {
+	if e != nil && e != proto.ErrNil {
 		rpc.HandleError(current, e)
 	}
 	handle.SetResponse(true)
@@ -293,7 +293,7 @@ func (rpc *RPCServer) SendResponse(current *CurrentContent, req *RPCRequestPacke
 	return e
 }
 
-func (rpc *RPCServer) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int32, msg interface{}, err error) {
+func (rpc *RPCServer) Unmarshal(sess *Session, data []byte) (lenParsed int, msgID int64, msg interface{}, err error) {
 	if len(data) < 4 {
 		return 0, 0, nil, nil
 	}
@@ -312,7 +312,7 @@ func (rpc *RPCServer) Unmarshal(sess *Session, data []byte) (lenParsed int, msgI
 	req.Timeout += uint32(time.Now().UnixNano() / 1e6)
 	return int(msgLen), 0, req, nil
 }
-func (rpc *RPCServer) HashProcessor(sess *Session, msgID int32, msg interface{}) (processorID int) {
+func (rpc *RPCServer) HashProcessor(sess *Session, msgID uint64, msg interface{}) (processorID int) {
 	req := msg.(*RPCRequestPacket)
 	return rpc.handle.HashProcessor(req)
 }
